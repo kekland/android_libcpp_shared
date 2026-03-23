@@ -1,7 +1,7 @@
+import 'package:android_libcpp_shared/src/locate_ndk.dart';
 import 'package:code_assets/code_assets.dart';
 import 'package:hooks/hooks.dart';
 import 'package:logging/logging.dart';
-import 'package:native_toolchain_c/native_toolchain_c.dart';
 
 void main(List<String> args) async {
   final logger = Logger('AndroidLibcppSharedHook')
@@ -20,13 +20,27 @@ void main(List<String> args) async {
       );
       return;
     }
-    logger.info('Adding libc++_shared.so from Android system libraries...');
 
-    final androidLibDir = await resolveAndroidSystemLibPath(
-      input.config.code,
-      logger: logger,
-    ).first;
-    final libcppSharedPath = androidLibDir.resolve('libc++_shared.so');
+    final Architecture targetArchitecture =
+        input.config.code.targetArchitecture;
+
+    logger.info('Searching for android NDK...');
+    final ndkPaths = await NDKLocator.locate();
+    final ndk = ndkPaths.forBuildConfig(input.config);
+    if (ndk == null) {
+      throw StateError(
+        'No suitable NDK found for target architecture $targetArchitecture.',
+      );
+    }
+    logger.info('Found NDK at ${ndk.path}, version ${ndk.version}.');
+    final libcppSharedPath = ndk
+        .hostArchitectures
+        .first
+        .targetArchitectures
+        .first
+        .sysrootLibPath
+        .resolve('libc++_shared.so');
+
     output.assets.code.add(
       CodeAsset(
         package: input.packageName,
