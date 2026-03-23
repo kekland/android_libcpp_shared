@@ -6,12 +6,15 @@ import 'package:android_libcpp_shared/src/process.dart';
 import 'package:glob/list_local_fs.dart';
 import 'package:hooks/hooks.dart';
 import 'package:code_assets/code_assets.dart';
+import 'package:logging/logging.dart';
 
+/// Represents a host architecture that can be used for building with the Android NDK.
 enum HostArch {
   x64,
   arm64,
   armv7;
 
+  /// Returns the string representation of this HostArch in the format used by the NDK toolchain directories
   @override
   String toString() {
     switch (this) {
@@ -24,6 +27,7 @@ enum HostArch {
     }
   }
 
+  /// Parses a string representation of a host architecture and returns the corresponding HostArch enum value.
   static HostArch? fromString(String str) {
     switch (str) {
       case 'x86_64':
@@ -38,11 +42,14 @@ enum HostArch {
   }
 }
 
+/// Represents a host OS that can be used for building with the Android NDK.
 enum HostOS {
   linux,
   macos,
   windows;
 
+  /// Returns the string representation of this HostOS in the format used by the NDK toolchain directories
+  /// (e.g. "linux", "darwin", "windows").
   @override
   String toString() {
     switch (this) {
@@ -55,6 +62,7 @@ enum HostOS {
     }
   }
 
+  /// Parses a string representation of a host OS and returns the corresponding HostOS enum value.
   static HostOS? fromString(String str) {
     switch (str) {
       case 'linux':
@@ -70,6 +78,7 @@ enum HostOS {
   }
 }
 
+/// Represents a specific architecture of the Android NDK, such as arm64 or x86.
 enum LibArch {
   arm,
   arm64,
@@ -77,6 +86,7 @@ enum LibArch {
   riscv64,
   x86_64;
 
+  /// Converts this LibArch to the corresponding target triple string used in the NDK sysroot library paths.
   String toTriple() {
     switch (this) {
       case LibArch.arm:
@@ -92,6 +102,7 @@ enum LibArch {
     }
   }
 
+  /// Converts this LibArch to the corresponding LLVM target triple string.
   String toLlvmTriple() {
     switch (this) {
       case LibArch.arm:
@@ -107,6 +118,7 @@ enum LibArch {
     }
   }
 
+  /// Parses a string representation of a library architecture and returns the corresponding LibArch enum value.
   static LibArch? fromString(String str) {
     switch (str) {
       case 'arm':
@@ -131,6 +143,8 @@ enum LibArch {
     }
   }
 
+  /// Parses a target triple string in the format used by LLVM (e.g. "armv7-none-linux-androideabi")
+  /// and returns the corresponding LibArch or `null` if it cannot be parsed.
   static LibArch? fromLlvmTriple(String str) {
     switch (str) {
       case 'armv7-none-linux-androideabi':
@@ -148,6 +162,8 @@ enum LibArch {
     }
   }
 
+  /// Parses a target triple string (e.g. "arm-linux-androideabi") and returns the corresponding LibArch
+  /// or `null` if it cannot be parsed.
   static LibArch? fromTriple(String str) {
     switch (str) {
       case 'arm-linux-androideabi':
@@ -167,13 +183,23 @@ enum LibArch {
 }
 
 final class NKDVersion {
+  /// NDK Major version number
   final int major;
+
+  /// NDK Minor version number
   final int minor;
+
+  /// NDK Patch version number
   final int patch;
+
+  /// Optional flavor string (e.g. "beta", "rc1") for pre-release versions of the NDK.
   final String flavor;
 
+  /// Creates an NKDVersion instance with the given major, minor, patch, and optional flavor.
   NKDVersion(this.major, this.minor, this.patch, [this.flavor = '']);
 
+  /// Parses an NDK version string [version] in the format "major.minor.patch-flavor"
+  /// and returns an NKDVersion instance.
   factory NKDVersion.parse(String version) {
     final regex = RegExp(r'^(\d+)\.(\d+)\.(\d+)(?:-(.+))?$');
     final match = regex.firstMatch(version);
@@ -188,6 +214,9 @@ final class NKDVersion {
     );
   }
 
+  /// Compares this NKDVersion to [other] for sorting purposes.
+  /// Versions are compared first by major, then minor, then patch, and finally by flavor.
+  /// Flavors are compared alphabetically.
   int compareTo(NKDVersion other) {
     if (major != other.major) {
       return major.compareTo(other.major);
@@ -207,9 +236,14 @@ final class NKDVersion {
 }
 
 final class NDKApiLevel {
+  /// The API level number
   final int level;
+
+  /// The path to the sysroot library directory for this API level
+  /// (e.g. "sysroot/usr/lib/arm-linux-androideabi/21/").
   final Uri sysrootLibPath;
 
+  /// Creates an NDKApiLevel instance with the given API level and sysroot library path.
   NDKApiLevel(this.level, this.sysrootLibPath);
 
   @override
@@ -217,16 +251,23 @@ final class NDKApiLevel {
 }
 
 final class NDKTargetArchitecture {
+  /// The target architecture (e.g. arm64, x86).
   final LibArch arch;
+
+  /// The path to the sysroot library directory for this target architecture
   final Uri sysrootLibPath;
   final List<NDKApiLevel> _apiLevels;
 
+  /// Creates an NDKTargetArchitecture instance with the given architecture, sysroot library path,
+  /// and optional API levels.
   NDKTargetArchitecture(
     this.arch,
     this.sysrootLibPath, {
     List<NDKApiLevel>? apiLevels,
   }) : _apiLevels = apiLevels ?? [];
 
+  /// Finds the highest API level that is greater than or equal to the given [minApiLevel].
+  /// Returns `null` if no such API level exists.
   NDKApiLevel? highestMatching(int minApiLevel) {
     final suitableApiLevels =
         _apiLevels.where((api) => api.level >= minApiLevel).toList()
@@ -245,11 +286,18 @@ final class NDKTargetArchitecture {
 }
 
 final class NDKHostArchitecture {
+  /// The host OS (e.g. linux, darwin, windows).
   final HostOS os;
+
+  /// The host architecture (e.g. x86_64, arm64).
   final HostArch arch;
+
+  /// The path to the LLVM toolchain directory for this host architecture
   final Uri llvmToolchainPath;
   final List<NDKTargetArchitecture> _targetArchitectures;
 
+  /// Creates an NDKHostArchitecture instance with the given OS, architecture,
+  /// LLVM toolchain path, and optional target architectures.
   NDKHostArchitecture(
     this.os,
     this.arch,
@@ -257,6 +305,7 @@ final class NDKHostArchitecture {
     List<NDKTargetArchitecture>? targetArchitectures,
   }) : _targetArchitectures = targetArchitectures ?? [];
 
+  /// Finds the target architecture info for the given [targetArch], or `null` if not found.
   NDKTargetArchitecture? findTarget(LibArch targetArch) {
     try {
       return _targetArchitectures.firstWhere((t) => t.arch == targetArch);
@@ -277,16 +326,21 @@ final class NDKHostArchitecture {
 }
 
 final class NDKInfo {
+  /// The path to the root directory of the NDK installation.
   final Uri path;
+
+  /// The version of the NDK.
   final NKDVersion version;
   final List<NDKHostArchitecture> hostArchitectures;
 
+  /// Creates an NDKInfo instance with the given path, version, and host architectures.
   NDKInfo({
     required this.path,
     required this.version,
     required this.hostArchitectures,
   });
 
+  /// Finds the host architecture info for the given [hostOS], or `null` if not found.
   NDKHostArchitecture? findHost(HostOS hostOS) {
     try {
       return hostArchitectures.firstWhere((h) => h.os == hostOS);
@@ -322,6 +376,7 @@ class NDKLocator {
 
   static final _pathExe = Platform.isWindows ? 'ndk-build.cmd' : 'ndk-build';
 
+  /// Expands a path template with environment variables and glob patterns.
   static List<FileSystemEntity> expandPath(String pathTemplate) {
     final path = pathTemplate.replaceAll(
       '\$HOME',
@@ -332,8 +387,8 @@ class NDKLocator {
     return matches;
   }
 
-  static Future<NDKInfo> _getNDKInfo(Uri ndkPath) async {
-    final sourceProps = File('${ndkPath.toFilePath()}/source.properties');
+  static Future<NDKInfo> _getNDKInfo(Uri ndkPath, {Logger? logger}) async {
+    final sourceProps = File('${ndkPath.toFilePath()}source.properties');
     if (!sourceProps.existsSync()) {
       throw Exception(
         'NDK at ${ndkPath.toFilePath()} is missing source.properties',
@@ -357,7 +412,7 @@ class NDKLocator {
 
     // The toolchains directory contain subdirectories for each host arch
     final toolchainsDir = Directory(
-      '${ndkPath.toFilePath()}/toolchains/llvm/prebuilt/',
+      '${ndkPath.toFilePath()}toolchains/llvm/prebuilt/',
     );
     if (!toolchainsDir.existsSync()) {
       throw Exception(
@@ -366,7 +421,7 @@ class NDKLocator {
     }
     final hostArchitectures = <NDKHostArchitecture>[];
     for (final hostDir in toolchainsDir.listSync().whereType<Directory>()) {
-      print('Checking host directory: ${hostDir.uri.toFilePath()}');
+      logger?.fine('Checking host directory: ${hostDir.uri.toFilePath()}');
       final hostName = hostDir.uri.pathSegments.lastWhere(
         (segment) => segment.isNotEmpty,
       );
@@ -434,7 +489,7 @@ class NDKLocator {
   }
 
   /// Returns the path to the Android NDK, or `null` if it cannot be found.
-  static Future<List<NDKInfo>> locate() async {
+  static Future<List<NDKInfo>> locate({Logger? logger}) async {
     final ndkPaths = <Uri>{};
     // first see if the exe is in path using which
     final whichResult = await which(_pathExe);
@@ -486,21 +541,25 @@ class NDKLocator {
     final List<NDKInfo> ndkInfos = [];
     for (final ndkPath in ndkPaths) {
       try {
-        final info = await _getNDKInfo(ndkPath);
+        final info = await _getNDKInfo(ndkPath, logger: logger);
         ndkInfos.add(info);
       } catch (e, st) {
         // ignore invalid NDK directories
-        print(
+        logger?.warning(
           'Warning: Failed to get info for NDK at ${ndkPath.toFilePath()}: $e',
         );
-        print(st);
+        logger?.fine('Stack trace: $st');
       }
     }
     return ndkInfos;
   }
 }
 
+/// Extension method to find the best matching NDKInfo for a given BuildConfig.
+/// This will return the NDKInfo with the highest version that supports the target
+/// architecture and minimum API level specified in the BuildConfig.
 extension FindNDKInfo on Iterable<NDKInfo> {
+  /// Finds the best matching NDKInfo for the given [config], or `null` if no suitable NDK is found.
   NDKInfo? forBuildConfig(BuildConfig config) {
     final sorted = toList()..sort((a, b) => b.version.compareTo(a.version));
     final hostOS = HostOS.fromString(Platform.operatingSystem);
@@ -538,5 +597,6 @@ extension FindNDKInfo on Iterable<NDKInfo> {
         }
       }
     }
+    return null;
   }
 }

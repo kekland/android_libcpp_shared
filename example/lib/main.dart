@@ -26,6 +26,7 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   late final ffi.DynamicLibrary? _lib;
+  late final int Function()? _randFunc;
   int _randomNumber = -1;
 
   @override
@@ -33,19 +34,25 @@ class _MyHomePageState extends State<MyHomePage> {
     super.initState();
     _randomNumber = -1; // Initialize with an invalid random number.
     _lib = libCppShared;
+    if (_lib != null) {
+      _randFunc = _lib
+          .lookup<ffi.NativeFunction<ffi.Int64 Function()>>('rand')
+          .asFunction<int Function()>();
+    } else {
+      _randFunc = null;
+    }
+
+    getRandomInt();
   }
 
   /// Example of using a foreign function from libc++_shared.so.
   /// Generate a random number between 0 and 99 using the C standard library's
   /// rand() function.
   void getRandomInt() {
-    if (_lib == null) {
+    if (_lib == null || _randFunc == null) {
       return;
     }
-    final rand = _lib
-        .lookup<ffi.NativeFunction<ffi.Int64 Function()>>('rand')
-        .asFunction<int Function()>();
-    final time = rand();
+    final time = _randFunc();
     setState(() {
       _randomNumber = time % 100; // Get a number between 0 and 99.
     });
@@ -66,7 +73,7 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
           ElevatedButton(
             onPressed: () => getRandomInt(),
-            child: const Text('Generate New Random Number'),
+            child: const Text('Generate Random Number'),
           ),
         ],
       ),
